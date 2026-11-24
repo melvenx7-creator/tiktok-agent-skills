@@ -8,14 +8,36 @@ on:
         required: true
         type: string
       confirm_render:
-        description: "Autorizar geração e renderização com créditos Shotstack"
+        description: "Autorizar geração e renderização com créditos OpenAI e Shotstack"
         required: true
         type: boolean
         default: false
+      language:
+        description: "Idioma falado (ex.: pt-PT, pt-BR, en-US)"
+        required: false
+        type: string
+        default: "pt-PT"
+      duration:
+        description: "Duração alvo em segundos (10-90)"
+        required: false
+        type: string
+        default: "30"
+      shotstack_env:
+        description: "Ambiente Shotstack (stage = marca de água, sem custo de render; production = vídeo final)"
+        required: false
+        type: choice
+        options:
+          - stage
+          - production
+        default: stage
+
+permissions:
+  contents: read
 
 jobs:
   create-video:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,140 +47,31 @@ jobs:
         with:
           node-version: 20
 
+      # Offline tests (mocked APIs, no keys, no cost). Stops the run if the pipeline is broken.
+      - name: Test pipeline
+        run: npm test
+
+      # Inputs and secrets reach the script only through environment variables.
       - name: Generate script and video
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SHOTSTACK_API_KEY: ${{ secrets.SHOTSTACK_API_KEY }}
+          SHOTSTACK_ENV: ${{ inputs.shotstack_env }}
           TOPIC: ${{ inputs.topic }}
+          LANGUAGE: ${{ inputs.language }}
+          DURATION: ${{ inputs.duration }}
           CONFIRM_RENDER: ${{ inputs.confirm_render }}
         run: |
-          node <<'NODE'
-          const fs = require('fs');
-
-          async function request(url, options) {
-            const r = await fetch(url, options);
-            const data = await r.json();
-            if (!r.ok) throw new Error(JSON.stringify(data));
-            return data;
-          }
-
-          async function main() {
-            const ai = await request('https://api.openai.com/v1/responses', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                model: 'gpt-4.1-mini',
-                input: `Cria um guião TikTok em português para o tema: ${process.env.TOPIC}. Devolve apenas JSON válido com title, hook, script, scenes (6 objetos com visual e caption) e hashtags.`
-              })
-            });
-
-            const text = ai.output?.flatMap(x => x.content || [])
-              .find(x => x.type === 'output_text')?.text;
-            if (!text) throw new Error('OpenAI não devolveu o guião.');
-
-            const script = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ''));
-            fs.mkdirSync('output', { recursive: true });
-            fs.writeFileSync('output/roteiro.json', JSON.stringify(script, null, 2));
-
-            if (process.env.CONFIRM_RENDER !== 'true') {
-              console.log('Guião criado. Renderização não autorizada; nenhum render Shotstack foi enviado.');
-              return;
-            }
-
-            const headers = {
-              'x-api-key': process.env.SHOTSTACK_API_KEY,
-              'Content-Type': 'application/json'
-            };
-
-            const catalogue = await request(
-              'https://api.shotstack.io/edit/v1/models?expand=options',
-              { headers }
-            );
-
-            const all = catalogue.response?.models || catalogue.models || [];
-            const models = Array.isArray(all) ? all : Object.values(all);
-            const imageModel = models.find(m =>
-              (m.type === 'image' || m.assetType === 'image') &&
-              m.available === true
-            );
-
-            if (!imageModel) {
-              throw new Error('Não encontrei um modelo de imagem disponível na tua conta Shotstack.');
-            }
-
-            const voice = {
-              asset: {
-                type: 'text-to-speech',
-                text: script.script,
-                voice: 'Ines',
-                language: 'pt-PT'
-              },
-              start: 0,
-              length: 'auto',
-              alias: 'voice'
-            };
-
-            const tracks = [{
-              clips: [voice]
-            }, {
-              clips: script.scenes.map((scene, i) => ({
-                asset: {
-                  type: 'image',
-                  prompt: scene.visual,
-                  model: imageModel.id
-                },
-                start: i * 5,
-                length: 5,
-                fit: 'cover'
-              }))
-            }];
-
-            const edit = {
-              timeline: { background: '#000000', tracks },
-              output: {
-                format: 'mp4',
-                resolution: 'hd',
-                aspectRatio: '9:16'
-              }
-            };
-
-            const submitted = await request(
-              'https://api.shotstack.io/edit/v1/render',
-              { method: 'POST', headers, body: JSON.stringify(edit) }
-            );
-
-            const id = submitted.response?.id;
-            if (!id) throw new Error('Shotstack não devolveu o ID do render.');
-
-            let result;
-            for (let i = 0; i < 60; i++) {
-              await new Promise(resolve => setTimeout(resolve, 10000));
-              result = await request(
-                `https://api.shotstack.io/edit/v1/render/${id}`,
-                { headers }
-              );
-              const status = result.response?.status;
-              console.log('Estado:', status);
-              if (status === 'done' || status === 'failed') break;
-            }
-
-            const url = result.response?.url;
-            if (result.response?.status !== 'done' || !url) {
-              throw new Error('Render não terminou com sucesso. Consulta o estado no Shotstack.');
-            }
-
-            fs.writeFileSync('output/video-link.txt', url);
-            console.log('VÍDEO MP4:', url);
-          }
-
-          main().catch(e => { console.error(e); process.exit(1); });
-          NODE
+          args=(--topic "$TOPIC" --language "$LANGUAGE" --duration "$DURATION" --out output)
+          if [ "$CONFIRM_RENDER" = "true" ]; then
+            args+=(--confirm)
+          fi
+          node pipeline/src/run.js "${args[@]}"
 
       - name: Save outputs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tiktok-video-files
           path: output/
+          if-no-files-found: ignore

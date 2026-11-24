@@ -1,0 +1,13 @@
+{
+  "name": "tiktok-agent-skills",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude skills plus an OpenAI + Shotstack pipeline that turns a topic into a vertical 9:16 MP4",
+  "scripts": {
+    "generate": "node pipeline/src/run.js",
+    "dry-run": "node pipeline/src/run.js --dry-run",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}

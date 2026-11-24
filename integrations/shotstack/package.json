@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "render": "node src/cli.js render",
-    "status": "node src/cli.js status"
+    "status": "node src/cli.js status",
+    "models": "node src/cli.js models"
   },
   "engines": { "node": ">=18" },
   "dependencies": { "dotenv": "^16.4.7" }

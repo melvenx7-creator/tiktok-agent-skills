@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { submitRender, getRenderStatus, currentEnvironment } from './client.js';
+import { submitRender, getRenderStatus, currentEnvironment, listModels } from './client.js';
 
 const [command, arg] = process.argv.slice(2);
 
@@ -14,8 +14,11 @@ try {
     if (!arg) throw new Error('Usage: npm run status -- RENDER_ID');
     const result = await getRenderStatus(arg);
     console.log(JSON.stringify(result, null, 2));
+  } else if (command === 'models') {
+    const result = await listModels();
+    console.log(JSON.stringify(result, null, 2));
   } else {
-    throw new Error('Choose a command: render or status.');
+    throw new Error('Choose a command: render, status or models.');
   }
 } catch (error) {
   console.error(error.message);
