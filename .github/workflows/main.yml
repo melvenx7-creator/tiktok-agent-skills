@@ -1,3 +1,4 @@
+
 name: TikTok Agent
 
 on:
@@ -8,6 +9,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   create:
     runs-on: ubuntu-latest
@@ -16,9 +20,43 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Generate video script
+
+      - name: Generate with OpenAI
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TOPIC: ${{ inputs.topic }}
         run: |
-          echo "Preparando agente para $TOPIC"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+
+          const response = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'gpt-4.1-mini',
+              input: `Cria um guião TikTok em português sobre: ${process.env.TOPIC}. Inclui título, gancho, narração, 6 cenas, legendas e hashtags. Responde em JSON válido.`
+            })
+          });
+
+          const data = await response.json();
+          if (!response.ok) throw new Error(JSON.stringify(data));
+
+          const result = data.output
+            .flatMap(x => x.content || [])
+            .find(x => x.type === 'output_text')?.text;
+
+          if (!result) throw new Error('Sem resposta da OpenAI');
+
+          await fs.mkdir('output', { recursive: true });
+          await fs.writeFile('output/roteiro.json', result);
+          console.log('Guião criado com sucesso!');
+          NODE
+
+      - name: Save generated script
+        uses: actions/upload-artifact@v4
+        with:
+          name: roteiro-tiktok
+          path: output/roteiro.json
