@@ -1,0 +1,26 @@
+{
+  "timeline": {
+    "background": "#000000",
+    "tracks": [
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "video",
+              "src": "https://cdn.shotstack.io/au/stage/replace-with-your-owner/sample-video.mp4"
+            },
+            "start": 0,
+            "length": 10,
+            "fit": "cover"
+          }
+        ]
+      }
+    ]
+  },
+  "output": {
+    "format": "mp4",
+    "resolution": "hd",
+    "aspectRatio": "9:16",
+    "fps": 30
+  }
+}

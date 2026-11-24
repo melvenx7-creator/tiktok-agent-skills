@@ -1,0 +1,13 @@
+{
+  "name": "tiktok-agent-shotstack-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal Node.js adapter for Shotstack cloud rendering",
+  "type": "module",
+  "scripts": {
+    "render": "node src/cli.js render",
+    "status": "node src/cli.js status"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "dotenv": "^16.4.7" }
+}
