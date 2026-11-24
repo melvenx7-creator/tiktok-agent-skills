@@ -16,6 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Start agent
+      - name: Generate video script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TOPIC: ${{ inputs.topic }}
         run: |
-          echo "TikTok Agent iniciado para: ${{ inputs.topic }}"
+          echo "Preparando agente para $TOPIC"
